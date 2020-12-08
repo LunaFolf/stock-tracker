@@ -20,7 +20,6 @@
     "nodemon": "^2.0.6"
   },
   "dependencies": {
-    "aws-sdk": "^2.805.0",
     "https-proxy-agent": "^5.0.0",
     "node-fetch": "^2.6.1",
     "yaml": "^1.10.0"
