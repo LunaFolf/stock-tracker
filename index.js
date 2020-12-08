@@ -3,6 +3,10 @@ const https = require('https')
 const YAML = require('yaml')
 const fetch = require('node-fetch')
 
+const minutesToWait = 1
+const waitTimeSeconds = minutesToWait * 60
+var countdown = 0
+
 console.clear()
 
 var configFile = null
@@ -13,19 +17,88 @@ try {
 }
 const config = configFile ? YAML.parse(configFile) : {}
 
-if (!config.sources || !config.sources.length) throw new Error('config.sources array needs to be set!')
+if (!config.sources) throw new Error('config.sources needs to be set!')
 
-for (var sourceIndex in config.sources) {
-  const url = config.sources[sourceIndex]
-  fetch(url)
-    .then(async res => {
-      response = await res.text()
-      if (config.badLines.some(line => {
-        return response.includes(line)
-      })) {
-        console.log('out of stock')
-      } else {
-        console.log('might be good actually')
+var outcome = []
+
+function getOutcome() {
+  const lastEntry = Object.keys(config.sources)[Object.keys(config.sources).length-1]
+  return new Promise((resolve, reject) => {
+    for (var [sourceName, details, index] of Object.entries(config.sources)) {
+      const constantSourceName = sourceName
+      const url = details.url
+      fetch(url, { timeout: 5000 })
+        .then(async res => {
+          console.log('response from ' + constantSourceName + '...')
+          response = await res.text()
+          const instock = !config.badLines.some(line => response.toLowerCase().includes(line.toLowerCase()))
+          const robotCheck = config.robotCheck.some(line => response.toLowerCase().includes(line.toLowerCase()))
+          outcome.push({
+            sourceName: constantSourceName,
+            instock: robotCheck ? false : instock,
+            robotCheck,
+            url
+          })
+        })
+        .catch(err => {
+          console.log(err.type + ' from ' + constantSourceName + '...')
+          outcome.push({
+            sourceName: constantSourceName,
+            instock: false,
+            robotCheck: false,
+            url,
+            error: err.type
+          })
+        })
+        .finally(() => {
+          if (outcome.length >= Object.keys(config.sources).length) resolve(outcome)
+        })
+    }
+  })
+}
+
+var now = new Date()
+
+function drawTable() {
+  process.stdout.write('\033[2;0H')
+  console.table(outcome.map(o => {
+    var print = { ...o }
+    delete print.url
+    return print
+  }))
+}
+
+function main() {
+  setTimeout(async function () {
+    process.stdout.write('\033[0;0H')
+    countdown = Math.max(countdown - 1, 0)
+    process.stdout.write('Next refresh in: ' + (countdown < 10 ? `0${countdown}` : countdown) + '\n')
+    if (countdown <= 0) {
+      outcome = []
+      await getOutcome()
+        .then(resOut => {
+          outcome = resOut
+          countdown = waitTimeSeconds
+          now = new Date()
+        })
+        .finally(() => {
+          drawTable()
+        })
+    } else {
+      drawTable()
+    }
+
+    process.stdout.write('\033[' + (Object.keys(config.sources).length + 6) + ';0H')
+    outcome.forEach(source => {
+      if (source.instock && !source.robotCheck) {
+        console.log(`[${now.toTimeString()}] ✅ (${source.sourceName}) In-stock! | ${source.url}`)
+      } else if (source.robotCheck) {
+        console.log(`[${now.toTimeString()}] 🤖 (${source.sourceName}) Stopped by Robot`)
       }
     })
+
+    main()
+  }, 1000)
 }
+
+main()

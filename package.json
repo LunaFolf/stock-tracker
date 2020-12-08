@@ -22,5 +22,9 @@
   "dependencies": {
     "node-fetch": "^2.6.1",
     "yaml": "^1.10.0"
+  },
+  "nodemonConfig": {
+    "legacyWatch": true,
+    "ext": "js,yml,yaml"
   }
 }
