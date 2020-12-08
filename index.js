@@ -1,9 +1,10 @@
 const fs = require('fs')
-const https = require('https')
 const YAML = require('yaml')
-const fetch = require('node-fetch')
 
-const minutesToWait = 1
+const fetch = require('node-fetch')
+const HttpsProxyAgent = require('https-proxy-agent')
+
+const minutesToWait = 1.5
 const waitTimeSeconds = minutesToWait * 60
 var countdown = 0
 
@@ -20,14 +21,25 @@ const config = configFile ? YAML.parse(configFile) : {}
 if (!config.sources) throw new Error('config.sources needs to be set!')
 
 var outcome = []
+var proxies = [...config.proxies]
 
 function getOutcome() {
-  const lastEntry = Object.keys(config.sources)[Object.keys(config.sources).length-1]
+  console.log('refreshing')
+  if (!proxies.length) proxies = [...config.proxies]
+  var proxyToUse = proxies.pop()
+  var proxy = 'http://' + proxyToUse
+  var agent = null
+  if (proxyToUse !== 'local') agent = HttpsProxyAgent(proxy)
   return new Promise((resolve, reject) => {
-    for (var [sourceName, details, index] of Object.entries(config.sources)) {
+    for (var [sourceName, details] of Object.entries(config.sources)) {
       const constantSourceName = sourceName
       const url = details.url
-      fetch(url, { timeout: 5000 })
+      fetch(url, {
+        timeout: 5000,
+        redirect: 'follow',
+        follow: 20,
+        agent
+        })
         .then(async res => {
           console.log('response from ' + constantSourceName + '...')
           response = await res.text()
